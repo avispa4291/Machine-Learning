@@ -1,0 +1,110 @@
+---
+title: "Practical Machine Learning Project"
+author: "SL"
+date: "November 12, 2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+# Load Libraries
+
+
+Libraries included for analysis
+```{r,results='hide'}
+library(ggplot2)
+library(caret)
+library(randomForest)
+library(gbm)
+library(doParallel)
+library(dplyr)
+library(e1071)
+setwd("C:/Users/Computron/Desktop/datascience/Machine")
+```
+
+```{r}
+
+trainset <- read.csv ("C:/Users/Computron/Desktop/datascience/Machine/pml-training.csv", head=TRUE, sep=",", na.strings=c("NA","#DIV/0!","")) 
+
+testset <- read.csv("C:/Users/Computron/Desktop/datascience/Machine/pml-testing.csv" , head=TRUE, sep=",", na.strings=c("NA","#DIV/0!",""))  
+
+```
+
+# Data cleanup
+We need to clean up the data from each set. This involves identifying ant NA valuse and removing them. additionally any columns with low variance need to be removed.
+
+```{r}
+
+OGtrain <- sapply(trainset, function(df) {sum(is.na(df)==TRUE)/length(df)})
+OGtest <- sapply(testset, function(df) {sum(is.na(df)==TRUE)/length(df)})
+
+trainnew <-names(which(OGtrain<0.95))
+trainset<-trainset[,trainnew]
+testnew  <-names(which(OGtest<0.95))
+testset<-testset[,testnew]
+
+nzv1 <- nearZeroVar(trainset,saveMetrics=TRUE)
+nzv2 <- nearZeroVar(testset,saveMetrics=TRUE)
+newtraining <- trainset[,which(nzv1$nzv==FALSE)]
+newtesting <- testset[,which(nzv2$nzv==FALSE)]
+
+clean1 <- grepl("X|timestamp|user_name", names(newtraining))
+newtraining <- newtraining[, which(clean1 ==FALSE)]
+
+clean2 <- grepl("X|timestamp|user_name|problem_id", names(newtesting))
+newtesting <- newtesting[, which(clean2 ==FALSE)]
+
+
+set.seed(23456)
+index <- createDataPartition (newtraining$classe, p=0.75, list=FALSE)
+testing <-newtraining [- index,]
+inTrain <- createDataPartition(testing$classe, p = 0.75)[[1]]
+cross <- testing[ -inTrain,]
+training <- newtraining [index ,]
+testing<-testing[inTrain,]
+
+```
+
+# Training Random Forest 
+
+Here we will process the data and train it for random forrest
+```{r}
+ cluster <- makeCluster(detectCores())
+ registerDoParallel(cluster)
+ mod1 <- train(classe ~ ., data=training, method="rf")
+ pred1 <- predict(mod1, testing)
+ stopCluster(cluster)
+ plot(mod1$finalModel)
+```
+
+## Confusion Matrix
+
+```{r}
+ confusionMatrix(pred1, testing$classe)
+```
+
+This shows an accuracy of 99.69%
+ 
+## Importance of predictors
+ 
+ ```{r}
+ print(plot(varImp(mod1)))
+ ```
+  
+## Out of sample error 
+ ```{r}
+pred1 <- predict(mod1,cross)
+accuracy <- sum(pred1 == cross$classe) / length(pred1)
+accuracy
+ ```
+Results show 99.67 % in the validation set.
+ 
+## Prediction 
+ 
+Values from our test case should result in 100% on the component quiz
+ ```{r}
+ final<- predict(mod1,newtesting)
+ final
+ ```
+## The results when applied to the quiz were 100% correct
